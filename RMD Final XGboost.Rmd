@@ -1,0 +1,215 @@
+---
+title: "RMD XGboost"
+author: "Benjamin GUIGON"
+date: "12/17/2020"
+output:
+  pdf_document: default
+  html_document: default
+header-includes:
+  - \usepackage{pdfpages}
+---
+
+
+Pour que les programme fonctionne il faut faudra a minima ces library
+```{r setup, include=FALSE}
+library(xgboost)
+library(magrittr)
+library(dplyr)
+library(Matrix)
+library(DiagrammeR)
+library(dplyr)         
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(randomForest)
+library(modeldata)
+library(datasets)
+library(fastDummies)
+```
+
+Dans ces 3 problèmes je vais vous montrer différentes utilisations de XGboost.
+Il existe 2 façons d'utiliser XGboost : 1) la Regression 
+2) la Classification
+
+L'une sert a faire de la prédiction direct un data set après un entrainement.
+L'autre sert à trouver les caractères d'importances majoritaires dans un data set suivant le résultat souhaité.
+
+La 1er exemple utilise la regression. Nous allons recherche dans un data set, la Shap value.
+
+Shap Value : "Grâce à la valeur de Shap, on peut déterminer l’effet des différentes variables d’une prédiction pour un modèle qui explique l’écart de cette prédiction par rapport à la valeur de base."
+
+Dans ce premier exemple je vais chercher la shap value d'un data set tiré de stackoverflow pour savoir ce qui rendrait suseptible une personne de travailler en télé travail ou non.
+
+```{r statistique de stackoverflow}
+data("stackoverflow")
+
+# isolate X and Y
+y = as.numeric(stackoverflow$Remote) - 1
+X = stackoverflow %>% select(-Remote)
+str(X)
+
+# Transform factor into dummy variable
+
+X = dummy_cols(X,
+               remove_first_dummy = TRUE)
+X = X %>% select(-Country)
+
+
+# Setting the parameters
+params = list(set.seed = 1997,
+              eval_metric = "auc",
+              objective = "binary:logistic")
+
+# Running xgboost
+
+model = xgboost(data = as.matrix(X),
+                label = y,
+                params = params,
+                nrounds = 20,
+                verbose = 1)
+
+# Shap value
+xgb.plot.shap(data = as.matrix(X),
+              model = model,
+              top_n = 5)
+
+```
+On retrouve donc ici le graphe qui affiche la shap value. Nous voyons donc que les 5 paramètres qui ont le plus d'influances sont : le salaire, l'expérience, la taille de l'entreprise, la satisfaction de la carrière et le type d'application utilisée. 
+Auriez-vous pariés sur ces paramètres avant de faire tourner le programme ? Personnellement, je n'aurais jamais mis la satisfaction de la carrière. Cette exemple nous montre bel et bien qu'il faut se mefier des a priori en data science.
+
+Le 2ème exemple utilise un data set tiré des resultats d'un Sonar qui detecte les rochers aux matériaux plus précieux.
+Dans ce cas nous allons essayer de prédire a l'aide d'un découpage en entrainement et en teste si les pierres que nous scanons auraient bien été detectées par le sonar.
+
+
+```{r Mine or Rock}
+Sonar = read.csv(file = '/Users/benjamin.guigon/Desktop/PSB/Maths - R/R/Xgboost/sonar_csv.csv')
+
+DataFrame = Sonar
+dim(DataFrame)
+head(DataFrame,3)
+
+
+ind = createDataPartition(DataFrame$Class, p = 2/3, list = FALSE)
+
+trainDF = DataFrame[ind,]
+testDF = DataFrame[-ind,]
+
+ControlParametres = trainControl(method = 'cv',
+                                  number = 5,
+                                  classProbs = TRUE)
+
+parametersGrid = expand.grid(eta = 0.1,
+                             colsample_bytree = c(0.5,0.7),
+                             max_depth = c(3,6),
+                             nrounds = 100,
+                             gamma = 1,
+                             min_child_weight = 2,
+                             subsample = c(0,1,2))
+parametersGrid 
+
+
+modelxgboost = train(Class~.,
+                     data = trainDF,
+                     method ="xgbTree",
+                     trControl = ControlParametres,
+                     tuneGrid = parametersGrid)
+
+modelxgboost
+
+prediction = predict(modelxgboost,testDF)
+
+t = table(predictions = prediction, actual = testDF$Class)
+t
+
+```
+Grace la table de prediction, nous voyons les resultats de notre algorithme. Il a classé 58 réponses justes et 11 réponses fausses soit une précision de 84%
+
+
+Enfin dans ce dernier cas nous allons essayer de predire si un élève sera admit ou non. Dans ce cas nous utiliserons les 2 premiers exemples, la regression et la classification. 
+Nous allons à la fois trouver les paramètres d'influences essayer de prédire si des élèves serons admit ou non et voir la précision de notre algorithme.
+
+```{r Admit or not}
+
+# Data
+#data = read.csv(file.choose(), header = T)
+data = read.csv(file = '/Users/benjamin.guigon/Desktop/PSB/Maths - R/R/Xgboost/binary.csv', header = T)
+str(data)
+data$rank = as.factor(data$rank)
+
+# Partition data
+set.seed(1234)
+ind = sample(2, nrow(data), replace = T, prob = c(0.8, 0.2))
+train = data[ind == 1,]
+test = data[ind == 2,]
+
+
+# Create matrix - One-Hot Encoding for Factor variables
+trainm = sparse.model.matrix(admit~.-1, data = train)
+train_label = train[,"admit"]
+length(train_label)
+dim(trainm)
+train_matrix = xgb.DMatrix(data = as.matrix(trainm), label = train_label)
+
+head(train_label)
+
+
+testm = sparse.model.matrix(admit~.-1, data = test)
+test_label = test[,"admit"]
+test_matrix = xgb.DMatrix(data = as.matrix(testm), label = test_label)
+
+#Parameters
+
+nc = length(unique(train_label))
+xgb_params = list("objective" = "multi:softprob",
+                  "eval_metric" = "mlogloss",
+                  "num_class" = nc)
+
+watchlist = list(train = train_matrix, test = test_matrix)
+
+#eXtrem Gradient Boosting Model
+
+bst_model = xgb.train(params = xgb_params,
+                      data = train_matrix,
+                      nrounds = 100,
+                      watchlist = watchlist,
+                      eta = 0.05,
+                      max.depth = 8,
+                      gamma = 0,
+                      subsample = 1,
+                      colsample_bytree = 1,
+                      missing = NA,
+                      set.seed = 333)
+
+e = data.frame(bst_model$evaluation_log)
+plot(e$iter,e$train_mlogloss, col = 'blue')
+lines(e$iter,e$test_mlogloss, col = 'red')
+
+# Feature importance
+
+imp = xgb.importance(colnames(train_matrix), model = bst_model)
+print(imp)
+xgb.plot.importance(imp)
+
+# Prediction & confusion matrix - test data
+
+p = predict(bst_model, newdata = test_matrix)
+head(p)
+pred = matrix(p, nrow = nc, ncol = length(p)/nc) %>%
+  t() %>%
+  data.frame() %>%
+  mutate(label = test_label, max_prob = max.col(.,"last")-1)
+head(pred)
+t = table(Prediction = pred$max_prob, Actual = pred$label)
+t
+```
+
+En effet, nous avons ici les paramètres classés selon leurs influences sur le modèle.
+Ainsi dans la table de prédiction, nous avons classé 51 bonnes réponses et et 24 mauvaises réponse, soit une précision de 68%.
+
+
+
+Dans un autre document vous pourrez retrouver une tutoriel sur le gradient boosting de manière manuscrite dans lequel j'explique comment fonctionne l'algorithme pour arriver à tous ces resultats.
+
+
+
