@@ -1,0 +1,217 @@
+---
+title: "R Markdown Shiny"
+author: "Benjamin GUIGON"
+date: "11/12/2020"
+output: html_document
+runtime: shiny
+---
+
+Tutoriel pour apprendre à maitriser Shiny.  
+Shiny est une librairie complèxe qui demande déjà quelques connaissances sur R. 
+N'hésitez pas à aller recherche plus de fonctions que celles qui sont déjà présentes.
+
+J'ai essayé de présenter les fonctionnalités les plus utilés, mais Shiny est une librairie très complète.
+
+
+---
+```{r Library}
+library(shiny)
+library(ggplot2)
+library(plotly)
+library(plyr)
+library(flexdashboard)
+library(cowplot)
+library(shinydashboard)
+```
+Toutes ces library vont servire à appeler des fonctions interns a Shiny
+Il y aussi des library qui sont faites pour appeler des affichages spéciaux qui permettent plus de liberté 
+et permettent aussi de faire de la mise en place plus otpimisée
+
+```{r UI}
+ui <- dashboardPage(skin = "red", 
+    dashboardHeader(title = "Dashboard général"),
+    dashboardSidebar( "Choix des pages", 
+                      sidebarMenu(
+                                   menuItem("Iris", tabName = "iris", icon = icon("tree")), 
+                                   menuItem("Cars", tabName = "cars", icon = icon("car")), 
+                                   menuItem("Machine Learning", tabName = "M_L", icon = icon("database")))), 
+    #---------------------------------------------------------------------------
+    dashboardBody(
+        tabItems( 
+            
+            tabItem("iris",
+                    fluidPage(h1("Iris"), 
+                    box(box(plotOutput("correlation_plot"),width = 8), 
+                    box(selectInput("features","Features:", c("Sepal.Width","Petal.Length","Petal.Width")), width = 4), 
+                    box(plotOutput("correlation_plot_2", width = "100%"), width = 12), 
+                    box(plotOutput("correlation_plot_3", width = "100%"), width = 12), 
+                    width = 12,height = "1350px"))), 
+            #--------------------------------------------------------------------
+            tabItem("cars",
+                    fluidPage(h1("Cars")), 
+                    dataTableOutput("carstable") 
+                    ),
+            #--------------------------------------------------------------------
+            tabItem("M_L",
+                    fluidPage(h1("Machine learning with Shiny"),
+                              wellPanel( 
+                                  tabsetPanel(
+                                      #--------------------------------------------------------------------
+
+                                        tabPanel("Exemple 1",
+                                                 box(numericInput(
+                                                     "SD",label = "Standard Deviation", value = 3), height = "100px"),
+                                                 box(numericInput(
+                                                     "Sample",label = "Sample size", value = 50,step = 10), height = "100px"),
+                                                 box(plotOutput("Tableau_1",width = "100%"), width = 12)
+                                                 ),
+                                      #--------------------------------------------------------------------
+
+                                       tabPanel("Exemple 2",
+                                                 plotOutput("Tableau_2", height = "600px")
+                                                 ),
+                                      #--------------------------------------------------------------------
+                                        tabPanel("Exemple 3",
+                                                 plotOutput("Tableau_3", height = "500px")
+                                                 ),
+                                      #--------------------------------------------------------------------
+                                        tabPanel("Exemple 4",
+                                                 plotOutput("Tableau_4", height = "500px")
+                                                ),
+                                      #--------------------------------------------------------------------
+                                        tabPanel("Exemple 5",
+                                                 sliderInput(
+                                                     "bins","Sample size",min = 1,max = 200,value = 0, step = 10),
+                                                 plotOutput("Tableau_5")
+                                        ),
+                                      #--------------------------------------------------------------------
+                                        tabPanel("Exemple 6",
+                                                 box(numericInput("Val","Valeur de k:", 20, min = 1, max = 20, step = 1)),
+                                                 box(sliderInput(
+                                                     "bins_2","Parameter",min = 0,max = 100,value = 0, step = 5),height ="100px"),
+                                                 box(plotOutput("Tableau_6", width = "100%"), width = 12)
+                                        )
+                                      #--------------------------------------------------------------------
+                                  )),
+                              ))
+        )
+    ),
+)
+```
+
+Exactement sur le même principe qu'HTML, et les autres langages Web, Shiny fonctionne via des balises qui vont permettrent d'imbriquer des éléments les uns
+dans les autres pour faire une sorte de système de Poupée russe.
+
+dashboardPage()
+dashboardHeader()
+dashboardSidebar()
+
+Ces balises servent à créer respectivement une page, une bandeau d'en-tête et une barre latérale
+Il faut biensur faire attention aux parenthèses qui seront à l'origine des imbrications. Dans le cas présent, j'ai inclus tout inclu dans la page pour avoir q'un seule et même interface quand je change d'onglet.
+
+
+sidebarMenu()
+dashboardBody()
+tabItems()
+
+Encore une fois ces balises vont servire à créer des objets biens spécifiques dans l'interface.  
+Sidebar menu va permettre de configurer la barre latérale.  
+Le Dashboard est lui comme une page blanche dans sur l'inteface, au lieu d'écrire dessus, on va afficher des graphes dessus.  
+Le tabItems va lui nous servire a créer plusieurs items différents dans chaque page blanche de notre interface. Chaque Item (sans s), renseignera l'onglet de la sidebar auquel il veut être lié.  
+
+Il suffit ensuite de renseigner les graphes, les inputs (si il y en a) et les dimensions dans chaque Item pour qu'ils puissent s'afficher correctement au moment du Run.  
+
+Les fonctions, les dimensions, les variables, les inputs sont décris dans les commentaires afin pouvoir comprendre le code en le lisant.
+
+```{r  PARAMETRES}
+    set.seed(955)
+    dat <- data.frame(cond = rep(c("A", "B"), each=10), xvar = 1:20 + rnorm(20,sd=3), yvar = 1:20 + rnorm(20,sd=3))
+    n <- 20
+    x1 <- rnorm(n); x2 <- rnorm(n)
+    y1 <- 2 * x1 + rnorm(n)
+    y2 <- 3 * x2 + (2 + rnorm(n))
+    A <- as.factor(rep(c(1, 2), each = n))
+    df <- data.frame(x = c(x1, x2), y = c(y1, y2), A = A)
+    fm <- lm(y ~ x + A, data = df) 
+
+```
+Pour tous les graphes que j'affiche dans mon interface Shiny, j'ai besoin de variables qui seront utilisées dans plusieurs onglets, je les initialise donc en au débit pour toutes les fonctions aient accés à ces variables.
+
+```{r  SERVER}
+server <- function(input, output) {
+  
+    output$correlation_plot = renderPlot({
+        plot(iris$Sepal.Length, iris[[input$features]], xlab = "Sepal length",
+             ylab = "Feature") 
+    })
+    #---------------------------------------------------------------------------
+    output$correlation_plot_2 = renderPlot({
+        ggplot(iris, aes(Sepal.Length, Sepal.Width)) + 
+            geom_point() + facet_grid(. ~ Species) +
+            stat_smooth(method = "lm") +
+            background_grid(major = 'y', minor = "none") +
+            panel_border()
+    })
+    #---------------------------------------------------------------------------
+    output$correlation_plot_3 = renderPlot({
+        ggplot(iris, aes(Petal.Length, Petal.Width)) + 
+            geom_point() + facet_grid(. ~ Species) +
+            stat_smooth(method = "lm") +
+            background_grid(major = 'y', minor = "none") + 
+            panel_border()
+    })
+    #---------------------------------------------------------------------------
+    output$carstable = renderDataTable(mtcars)
+    #---------------------------------------------------------------------------
+    output$Tableau_1 = renderPlot({
+         dat_1 <- data.frame(cond = rep(c("A", "B"), each=(input$Sample+input$Sample)), xvar = 1:input$Sample + rnorm(input$Sample,sd=input$SD), yvar = 1:input$Sample + rnorm(input$Sample,sd=input$SD))
+         ggplot(dat_1, aes(x=xvar, y=yvar)) + geom_point(shape=4)  
+    })
+    #---------------------------------------------------------------------------
+    output$Tableau_2 = renderPlot({
+        A = ggplot(dat, aes(x=xvar, y=yvar)) +geom_point(shape=2) + geom_smooth(method= lm) 
+        B = ggplot(dat, aes(x=xvar, y=yvar)) +geom_point(shape=1) +geom_smooth(method = loess)
+        ggdraw()+ draw_plot(B, 0, 0, 1, .5) +draw_plot(A, 0, .5, 1, .5) 
+    })
+    #---------------------------------------------------------------------------
+    output$Tableau_3 = renderPlot({
+        df <- data.frame(x <- rchisq(1000, 10, 10),
+                         y <- rnorm(1000))
+        ggplot(df, aes(x, y)) + 
+            geom_point(alpha = 0.5) + 
+            geom_density_2d(colour = "red") + 
+            theme(panel.background = element_rect(fill = 'white'))
+    })
+    #---------------------------------------------------------------------------
+    output$Tableau_4 = renderPlot({
+        ggplot(data = cbind(df, pred = predict(fm)), aes(x = x, y = y, color = A)) + 
+            geom_point() + 
+            geom_line(aes(y = pred))
+    })
+    #---------------------------------------------------------------------------
+    output$Tableau_5 = renderPlot({
+        dfGamma = data.frame(nu075 = rgamma(100+input$bins, 0.75),nu1 = rgamma(100+input$bins, 1),nu2 = rgamma(100+input$bins, 2)) 
+        dfGamma = stack(dfGamma) 
+        ggplot(dfGamma, aes(x = values)) + stat_density(aes(group = ind, color = ind),position="identity",geom="line")
+    })
+    #---------------------------------------------------------------------------
+    output$Tableau_6 = renderPlot({
+        x_dchisq <- seq(0, 5+input$bins_2, by = 0.1)  
+        y_dchisq <- dchisq(x_dchisq, df = input$Val)
+        dftest = data.frame(y_dchisq1 <- dchisq(x_dchisq, df = 5), y_dchisq2 <- dchisq(x_dchisq, df = 6))
+        dftest = stack(dftest)
+        plot(y_dchisq)
+    })
+}
+```
+Dans la partie server on retrouve :  
+- Les 3 tableaux de la page iris (correlation_plot, correlation_plot, correlation_plot) + l'input (feature)  
+- La table des voitures (carstable)  
+- Les 6 onglets (Tableau_1,Tableau_2,Tableau_3,Tableau_4,Tableau_5,Tableau_6) avec les différents graphes et inputs de l'onglet Machine Learning
+
+```{r APP}
+ shinyApp(ui = ui, server = server)
+
+```
+Cette ligne de commande permet de lancer l'interface Shiny en spécifiant quelle UI et quel server nous voulons utiliser.
+On pourrait penser qu'il y ai plusieurs serveur pour une seule interface générale et que l'on appelle différentes fois cette ligne de code pour afficher le serveur désiré.
